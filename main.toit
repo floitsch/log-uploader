@@ -67,6 +67,7 @@ main
   client/supabase.Client? := null
 
   while true:
+    // Trying to work around https://github.com/toitlang/pkg-http/issues/89
     catch --trace:
       client = supabase.Client.tls
           --host="$(supabase_project).supabase.co"
