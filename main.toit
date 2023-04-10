@@ -20,42 +20,75 @@ LOGS_TABLE ::= "logs"
 class LogForwarder:
   pin_/gpio.Pin
   port_/uart.Port
+  buffered_/List := [] // Of ByteArray.
+  buffered_size_/int := 0
+  offload_task_/Task? := null
+  upload_/Lambda
 
-  constructor pin_number/int:
+  constructor pin_number/int --upload/Lambda:
     pin_ = gpio.Pin pin_number
     port_ = uart.Port --rx=pin_ --tx=null --baud_rate=115200
+    upload_ = upload
+    offload_task_ = task::
+      offload_
 
-  listen [block]:
-    chunks := []
-    total_size := 0
+  close:
+    if offload_task_:
+      offload_task_.cancel
+      port_.close
+      pin_.close
+      offload_task_ = null
 
-    offload := :
-      total := ByteArray total_size
-      offset := 0
-      chunks.do:
-        total.replace offset it
-        offset += it.size
-      block.call total.to_string_non_throwing
-      chunks.clear
-      total_size = 0
+  listen:
+    while true:
+      chunk := port_.read
+      buffer_ chunk
 
+  buffer_ data/ByteArray:
+    print "Received $data.to_string_non_throwing"
+    buffered_.add data
+    buffered_size_ += data.size
+    if buffered_size_ > MAX_BUFFERED_DATA:
+      offload_
+
+  offload_:
     last_offload := Time.now
     while true:
-      exception := catch:
-        // Try to offload
-        with_timeout --ms=500:
-          chunk := port_.read
-          print "received: $chunk.to_string_non_throwing"
-          chunks.add chunk
-          total_size += chunks.last.size
-          if total_size > 1000:
-            offload.call
-          else if (Duration.since last_offload) > MAX_OFFLOAD_DELAY:
-            offload.call
+      last_message := Time.now
+      old_size := buffered_size_
+      while (Duration.since last_message) < MAX_QUIET_FOR_OFFLOAD:
+        sleep --ms=20
 
-      if exception == DEADLINE_EXCEEDED_ERROR:
-        if chunks.size > 0:
-          offload.call
+        if buffered_size_ == 0:
+          // Reset the timer.
+          last_offload = Time.now
+          last_message = last_offload
+          continue
+
+        if (Duration.since last_offload) > MAX_OFFLOAD_DELAY:
+          break
+
+        if buffered_size_ == old_size:
+          continue
+
+        if buffered_size_ > MAX_BUFFERED_DATA:
+          print "too much data"
+          break
+
+        last_message = Time.now
+        old_size = buffered_size_
+
+      print "Offloading"
+      total := ByteArray buffered_size_
+      offset := 0
+      buffered_.do:
+        total.replace offset it
+        offset += it.size
+      to_upload := total.to_string_non_throwing
+      buffered_.clear
+      buffered_size_ = 0
+      print "Uploading: $to_upload"
+      upload_.call to_upload
 
 main
     --supabase_project/string
@@ -65,6 +98,8 @@ main
     --pin_rx2/int?:
 
   client/supabase.Client? := null
+  forwarder1/LogForwarder? := null
+  forwarder2/LogForwarder? := null
 
   while true:
     // Trying to work around https://github.com/toitlang/pkg-http/issues/89
@@ -74,7 +109,6 @@ main
           --anon=supabase_anon
           --root_certificates=[certificate_roots.BALTIMORE_CYBERTRUST_ROOT]
 
-      print (client.rest.select LOGS_TABLE)
       mutex := monitor.Mutex
 
       offload := :: | uart_pin/int data/string |
@@ -87,12 +121,14 @@ main
 
       if pin_rx2:
         task::
-          forwarder := LogForwarder pin_rx2
-          forwarder.listen: | data/string |
+          forwarder2 = LogForwarder pin_rx2 --upload=:: | data/string |
             offload.call pin_rx2 data
+          forwarder2.listen
 
-      forwarder := LogForwarder pin_rx1
-      forwarder.listen: | data/string |
+      forwarder1 = LogForwarder pin_rx1 --upload=:: | data/string |
         offload.call pin_rx1 data
+      forwarder1.listen
 
+    if forwarder1: forwarder1.close
+    if forwarder2: forwarder2.close
     client.close
