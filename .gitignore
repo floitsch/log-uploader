@@ -1,0 +1,4 @@
+.packages/
+.env
+/esp32.toit
+/esp32_*.toit
