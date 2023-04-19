@@ -131,4 +131,4 @@ main
 
     if forwarder1: forwarder1.close
     if forwarder2: forwarder2.close
-    client.close
+    if client: client.close
