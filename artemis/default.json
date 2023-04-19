@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "sdk-version": "v2.0.0-alpha.75",
+  "artemis-version": "v0.5.0",
+  "max-offline": "10m",
+  "connections": [
+    {
+      "type": "wifi",
+      "ssid": "wifi 16.3",
+      "password": "internet1234"
+    }
+  ],
+  "containers": {
+    "logger": {
+      "entrypoint": "../esp32_chat_bots.toit",
+      "triggers": [
+        {
+          "interval": "0s"
+        }
+      ]
+    }
+  }
+}
