@@ -2,6 +2,7 @@
 // Use of this source code is governed by an MIT-style license that can be
 // found in the LICENSE file.
 
+import artemis
 import certificate_roots
 import gpio
 import monitor
@@ -93,13 +94,13 @@ class LogForwarder:
 main
     --supabase_project/string
     --supabase_anon/string
-    --device_id/string
     --pin_rx1/int
     --pin_rx2/int?:
-
   client/supabase.Client? := null
   forwarder1/LogForwarder? := null
   forwarder2/LogForwarder? := null
+
+  device_id := "$artemis.device.id"
 
   while true:
     // Trying to work around https://github.com/toitlang/pkg-http/issues/89
@@ -122,11 +123,13 @@ main
       if pin_rx2:
         task::
           forwarder2 = LogForwarder pin_rx2 --upload=:: | data/string |
-            offload.call pin_rx2 data
+            with_timeout --ms=3_000:
+              offload.call pin_rx2 data
           forwarder2.listen
 
       forwarder1 = LogForwarder pin_rx1 --upload=:: | data/string |
-        offload.call pin_rx1 data
+        with_timeout --ms=3_000:
+          offload.call pin_rx1 data
       forwarder1.listen
 
     if forwarder1: forwarder1.close

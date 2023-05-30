@@ -25,7 +25,9 @@ CREATE TABLE public.logs (
     id SERIAL PRIMARY KEY,
     created_at timestamp with time zone NOT NULL DEFAULT now(),
     uart_pin integer NOT NULL,
-    device_id uuid NOT NULL REFERENCES public.devices(id),
+    device_id uuid NOT NULL REFERENCES public.devices(id)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE,
     data text NOT NULL
 );
 

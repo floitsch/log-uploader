@@ -1,0 +1,9 @@
+{
+  "id": "0086be08-dde3-5e8b-8a6e-08541f5fbdff",
+  "organization": "d7d3487c-3af3-4af2-970c-0118fc764adf",
+  "groups": {
+    "default": {
+      "pod": "logger@latest"
+    }
+  }
+}
